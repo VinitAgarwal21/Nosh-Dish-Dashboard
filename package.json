@@ -1,0 +1,19 @@
+{
+  "name": "nosh-dish-dashboard",
+  "version": "1.0.0",
+  "description": "Nosh Dish Dashboard: Draft Editing and Safe Updates with Optimistic Concurrency Control",
+  "private": true,
+  "scripts": {
+    "install:all": "npm install && npm --prefix backend install && npm --prefix frontend install",
+    "seed": "npm --prefix backend run seed",
+    "seed:test": "npm --prefix backend run seed:test",
+    "seed:reset": "node scripts/resetDb.js",
+    "dev": "node scripts/dev.js",
+    "start": "npm --prefix backend start",
+    "test": "npm --prefix backend test",
+    "test:concurrency": "node backend/scripts/concurrencyTest.js"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
