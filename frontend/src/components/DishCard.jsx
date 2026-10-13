@@ -49,7 +49,10 @@ export function DishCard({
           src={imageError ? FALLBACK_IMAGE_DATA_URI : dish.imageUrl}
           alt={dish.dishName}
           className="card__image"
-          onError={() => setImageError(true)}
+          onError={(e) => {
+            e.currentTarget.onerror = null;
+            setImageError(true);
+          }}
           loading="lazy"
         />
 
@@ -111,7 +114,7 @@ export function DishCard({
           <ErrorBanner
             variant="conflict"
             title="Conflict Detected"
-            message={`Another update changed this dish (now v${conflictData.currentDish?.version || 'new'}). Reload to get the latest, which will discard your draft.`}
+            message={`Another update was saved while you were editing (now v${conflictData.currentDish?.version || 'latest'}). Your draft is kept. Reload latest to see it (this discards your draft).`}
             actionText="Reload latest (discards my draft)"
             onAction={() => reloadLatest(conflictData.currentDish)}
           />

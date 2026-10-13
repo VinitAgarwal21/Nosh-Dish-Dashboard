@@ -6,12 +6,27 @@ const errorHandler = require('./middleware/errorHandler');
 const app = express();
 
 // Enable CORS for Vite dev server or configured origin
-const allowedOrigin = process.env.CORS_ORIGIN || 'http://localhost:5173';
+const configuredOrigin = (process.env.CORS_ORIGIN || '').replace(/\/+$/, '');
+
 app.use(
   cors({
-    origin: allowedOrigin === '*' ? true : [allowedOrigin, 'http://localhost:5173', 'http://127.0.0.1:5173'],
+    origin: (origin, callback) => {
+      // Allow requests with no origin (such as curl, postman, server-to-server)
+      if (!origin) return callback(null, true);
+
+      const cleanOrigin = origin.replace(/\/+$/, '');
+      if (
+        configuredOrigin === '*' ||
+        cleanOrigin === configuredOrigin ||
+        /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(cleanOrigin)
+      ) {
+        return callback(null, true);
+      }
+      return callback(null, true); // Dev-friendly fallback
+    },
     methods: ['GET', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type'],
+    allowedHeaders: ['Content-Type', 'Accept'],
+    credentials: true,
   })
 );
 

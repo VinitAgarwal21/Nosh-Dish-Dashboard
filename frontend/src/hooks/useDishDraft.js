@@ -100,6 +100,12 @@ export function useDishDraft(savedDish, { onSaveSuccess, onReloadDish }) {
   const reloadLatest = useCallback((newerDish) => {
     const target = newerDish || conflictData?.currentDish;
     if (target) {
+      if (isDirty) {
+        const ok = window.confirm(
+          'This will discard your unsaved changes and load the latest saved version. Continue?'
+        );
+        if (!ok) return;
+      }
       setDraftName(target.dishName);
       setDraftPublished(target.isPublished);
       setConflictData(null);
@@ -108,7 +114,7 @@ export function useDishDraft(savedDish, { onSaveSuccess, onReloadDish }) {
         onReloadDish(target);
       }
     }
-  }, [conflictData, onReloadDish]);
+  }, [conflictData, isDirty, onReloadDish]);
 
   return {
     draftName,
