@@ -13,8 +13,14 @@ export function DishCard({
   newerServerDish,
   onSaveSuccess,
   onReloadDish,
+  onViewDish,
 }) {
   const [imageError, setImageError] = useState(false);
+
+  // Reset image error if URL changes
+  React.useEffect(() => {
+    setImageError(false);
+  }, [dish.imageUrl]);
 
   const {
     draftName,
@@ -23,6 +29,7 @@ export function DishCard({
     isSaving,
     inlineError,
     conflictData,
+    justSavedVersion,
     handleNameChange,
     handlePublishedChange,
     discardDraft,
@@ -46,8 +53,8 @@ export function DishCard({
       {/* Card Media Header */}
       <div className="card__media">
         <img
-          src={imageError ? FALLBACK_IMAGE_DATA_URI : dish.imageUrl}
-          alt={dish.dishName}
+          src={imageError || !dish.imageUrl ? FALLBACK_IMAGE_DATA_URI : dish.imageUrl}
+          alt={dish.dishName || 'Dish image'}
           className="card__image"
           onError={(e) => {
             e.currentTarget.onerror = null;
@@ -59,10 +66,17 @@ export function DishCard({
         {/* Top Floating Badges */}
         <div className="card__badges-overlay">
           <div className="card__badges-left">
-            <span className="badge badge--id">#{dish.dishId}</span>
+            <span
+              className={`badge badge--id ${onViewDish ? 'badge--clickable' : ''}`}
+              onClick={() => onViewDish && onViewDish(dish.dishId)}
+              title={onViewDish ? `View dish page /dishes/${dish.dishId}` : `Dish #${dish.dishId}`}
+            >
+              #{dish.dishId} {onViewDish ? '↗' : ''}
+            </span>
             <StatusBadge type="version" version={dish.version} />
           </div>
           <div className="card__badges-right">
+            {justSavedVersion && <StatusBadge type="success" label={`Saved v${justSavedVersion}`} />}
             {isDirty && <StatusBadge type="unsaved" />}
             <StatusBadge type={draftPublished ? 'published' : 'draft'} />
           </div>
@@ -85,6 +99,12 @@ export function DishCard({
             placeholder="Enter dish name"
             onChange={(e) => handleNameChange(e.target.value)}
           />
+          {draftName !== dish.dishName && (
+            <span className="form-diff">
+              <span className="form-diff__tag">Unsaved</span>
+              <span className="form-diff__text">Saved: &ldquo;{dish.dishName}&rdquo;</span>
+            </span>
+          )}
         </div>
 
         {/* Published Toggle */}
@@ -97,6 +117,12 @@ export function DishCard({
             onChange={handlePublishedChange}
           />
         </div>
+        {draftPublished !== dish.isPublished && (
+          <span className="form-diff">
+            <span className="form-diff__tag">Unsaved</span>
+            <span className="form-diff__text">Saved: {dish.isPublished ? 'Published' : 'Unpublished'}</span>
+          </span>
+        )}
 
         {/* External newer version banner (polled in background while user has draft) */}
         {hasServerUpdate && !conflictData && (
@@ -113,8 +139,8 @@ export function DishCard({
         {conflictData && (
           <ErrorBanner
             variant="conflict"
-            title="Conflict Detected"
-            message={`Another update was saved while you were editing (now v${conflictData.currentDish?.version || 'latest'}). Your draft is kept. Reload latest to see it (this discards your draft).`}
+            title="Conflict Detected (409)"
+            message={`Another update occurred while editing. The dish on the server is now v${conflictData.currentDish?.version || 'latest'}${conflictData.currentDish?.dishName ? ` ("${conflictData.currentDish.dishName}")` : ''}. Your local draft is preserved. Reload to load the latest saved version.`}
             actionText="Reload latest (discards my draft)"
             onAction={() => reloadLatest(conflictData.currentDish)}
           />

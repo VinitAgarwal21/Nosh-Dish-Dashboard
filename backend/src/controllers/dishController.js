@@ -34,6 +34,14 @@ function getDishById(req, res, next) {
 function updateDish(req, res, next) {
   try {
     const { dishId } = req.params;
+
+    if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+      const err = new Error('Request body must be a valid JSON object');
+      err.statusCode = 400;
+      err.details = ['Request body must be a valid JSON object'];
+      throw err;
+    }
+
     const { dishName, isPublished, expectedVersion } = req.body;
 
     const updatedDish = dishService.updateDish(dishId, {

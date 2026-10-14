@@ -11,7 +11,6 @@ getDb();
 const server = app.listen(PORT, () => {
   console.log(`[Nosh Backend] Server listening on port ${PORT}`);
   console.log(`[Nosh Backend] SQLite database: ${dbPath}`);
-  console.log(`[Nosh Backend] Health check: http://localhost:${PORT}/health`);
   console.log(`[Nosh Backend] Dishes API: http://localhost:${PORT}/dishes`);
 });
 

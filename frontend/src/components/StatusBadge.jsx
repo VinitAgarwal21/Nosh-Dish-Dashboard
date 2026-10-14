@@ -22,6 +22,15 @@ export function StatusBadge({ type, label, version }) {
     );
   }
 
+  if (type === 'success') {
+    return (
+      <span className="badge badge--success" title="Saved successfully to server">
+        <span className="badge-dot badge-dot--green" />
+        {label || 'Saved'}
+      </span>
+    );
+  }
+
   if (type === 'published') {
     return (
       <span className="badge badge--published" title="Visible on public menu">

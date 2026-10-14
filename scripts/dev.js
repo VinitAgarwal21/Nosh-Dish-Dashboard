@@ -10,7 +10,7 @@ console.log('[Dev Runner] Starting Backend & Frontend services...');
 const backend = spawn(process.execPath, ['--watch', 'src/server.js'], {
   cwd: backendDir,
   stdio: 'inherit',
-  env: { ...process.env, PORT: '3001' },
+  env: { ...process.env, PORT: '3000' },
 });
 
 const frontend = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--configLoader', 'runner'], {

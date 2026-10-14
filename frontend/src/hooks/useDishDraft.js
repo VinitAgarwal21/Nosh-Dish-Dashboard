@@ -16,6 +16,7 @@ export function useDishDraft(savedDish, { onSaveSuccess, onReloadDish }) {
   const [isSaving, setIsSaving] = useState(false);
   const [inlineError, setInlineError] = useState(null);
   const [conflictData, setConflictData] = useState(null);
+  const [justSavedVersion, setJustSavedVersion] = useState(null);
 
   // Synchronize draft state if savedDish changes from outside while user has NOT made edits
   const isDirty = draftName !== savedDish.dishName || draftPublished !== savedDish.isPublished;
@@ -72,6 +73,11 @@ export function useDishDraft(savedDish, { onSaveSuccess, onReloadDish }) {
       setDraftPublished(updated.isPublished);
       setInlineError(null);
       setConflictData(null);
+      setJustSavedVersion(updated.version);
+
+      setTimeout(() => {
+        setJustSavedVersion(null);
+      }, 3000);
 
       if (onSaveSuccess) {
         onSaveSuccess(updated);
@@ -123,6 +129,7 @@ export function useDishDraft(savedDish, { onSaveSuccess, onReloadDish }) {
     isSaving,
     inlineError,
     conflictData,
+    justSavedVersion,
     handleNameChange,
     handlePublishedChange,
     discardDraft,

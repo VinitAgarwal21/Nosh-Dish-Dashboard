@@ -11,6 +11,7 @@ export function DishGrid({
   isLoading,
   onSaveSuccess,
   onReloadDish,
+  onViewDish,
 }) {
   if (isLoading) {
     return (
@@ -49,6 +50,7 @@ export function DishGrid({
           newerServerDish={newerServerDishesMap[dish.dishId]}
           onSaveSuccess={onSaveSuccess}
           onReloadDish={onReloadDish}
+          onViewDish={onViewDish}
         />
       ))}
     </div>

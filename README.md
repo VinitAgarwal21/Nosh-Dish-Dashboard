@@ -1,188 +1,251 @@
-# Nosh Dish Dashboard
+# 🍽️ Nosh Dish Dashboard
 
-A dish-management dashboard featuring local draft editing, backend validation, atomic optimistic concurrency control, and real-time live synchronization.
+**Draft Editing & Safe Updates with Optimistic Concurrency Control**
 
-Built for the **Nosh Full Stack Take-Home Assignment**.
+A full-stack dish management dashboard that lets restaurant operators view, edit and publish dishes with instant local drafts, real-time background sync, and safe concurrent editing powered by optimistic locking.
+
+![Home Page](assets/01_home.png)
 
 ---
 
 ## Table of Contents
-1. [Tech Stack](#tech-stack)
-2. [Prerequisites](#prerequisites)
-3. [Quick Start & Setup](#quick-start--setup)
-4. [Environment Configuration](#environment-configuration)
-5. [Architecture & Layering](#architecture--layering)
-6. [API Reference & curl Examples](#api-reference--curl-examples)
-7. [Verification & Acceptance Checks](#verification--acceptance-checks)
-8. [Key Design Decision: Optimistic Concurrency Control](#key-design-decision-optimistic-concurrency-control)
-9. [Bonus Feature: Live External Update Sync](#bonus-feature-live-external-update-sync)
-10. [Automated Testing](#automated-testing)
-11. [Known Limitations](#known-limitations)
-12. [Approximate Time Spent & Disclosures](#approximate-time-spent--disclosures)
+
+- [Features](#features)
+- [Screenshots](#screenshots)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Prerequisites](#prerequisites)
+- [Getting Started](#getting-started)
+  - [1. Clone the Repository](#1-clone-the-repository)
+  - [2. Install Dependencies](#2-install-dependencies)
+  - [3. Configure Environment](#3-configure-environment)
+  - [4. Seed the Database](#4-seed-the-database)
+  - [5. Run the Application](#5-run-the-application)
+- [Seeding & Reseeding](#seeding--reseeding)
+- [Available Scripts](#available-scripts)
+- [API Reference](#api-reference)
+- [Architecture](#architecture)
+
+---
+
+## Features
+
+- **Dish Grid View** — Responsive card grid displaying all dishes with images, names, publish status, and version badges
+- **Single Dish View** — Deep-link to any dish via `/dishes/:dishId`
+- **Inline Draft Editing** — Edit dish name and toggle publish status locally; changes are tracked as unsaved drafts
+- **Dirty State Tracking** — Visual indicators (amber border, "Unsaved" badge) clearly show which fields have pending changes
+- **Explicit Save / Discard** — Save and Discard buttons appear only when the card is dirty
+- **Optimistic Concurrency Control** — Every `PATCH` sends the client's `expectedVersion`; the server bumps the version atomically and rejects stale writes with HTTP 409
+- **Conflict Resolution UI** — On a 409 conflict the card shows the server's current version and lets the user reload the latest, discarding their draft
+- **Background Polling** — The frontend polls the server every 5 seconds; when a newer version is detected while the user has a draft, an info banner offers to reload
+- **Graceful Pause** — Polling pauses automatically when the browser tab is hidden and resumes on focus
+- **Validation Errors** — The backend validates all fields and returns structured 400 errors that the frontend renders inline
+- **Image Fallback** — A built-in SVG placeholder is shown when a dish image fails to load
+- **Skeleton Loading** — Shimmer skeleton cards are displayed while data is being fetched
+- **Client-Side Routing** — Lightweight `pushState` router with `/, /dishes, /dishes/:dishId` routes and a 404 fallback
+
+---
+
+## Screenshots
+
+| Home | Dishes Grid |
+|------|-------------|
+| ![Home Page](assets/01_home.png) | ![Dishes Grid](assets/02_dishes_grid.png) |
+
+| Single Dish Detail | Draft Editing (Dirty State) |
+|--------------------|----------------------------|
+| ![Dish Detail](assets/03_dish_detail.png) | ![Draft Editing](assets/04_draft_editing.png) |
+| ![Conflict in versions](assets/image-5.png) | ![Validation Check](assets/image.png) |
+
 
 ---
 
 ## Tech Stack
 
-- **Backend**: Node.js (18+ / 24+), Express, SQLite via `better-sqlite3` (file-based persistent DB with WAL mode, real transactional SQL).
-- **Frontend**: React 19 + Vite, Vanilla CSS (modular design tokens, accessible, zero UI frameworks), Fetch API.
-- **Repository Structure**:
-  ```text
-  .
-  ├── backend/
-  │   ├── data/            # dishes.json seed file & persistent nosh.db (ignored in git)
-  │   ├── scripts/         # seed.js, seedTest.js, concurrencyTest.js
-  │   ├── src/
-  │   │   ├── db/          # connection.js, dishRepository.js
-  │   │   ├── services/    # dishService.js (validation & business logic)
-  │   │   ├── controllers/ # dishController.js
-  │   │   ├── routes/      # dishRoutes.js
-  │   │   ├── middleware/  # errorHandler.js (central 400/404/409/500 handler)
-  │   │   ├── app.js       # Express app configuration & CORS
-  │   │   └── server.js    # HTTP server bootstrap & graceful shutdown
-  │   ├── test/            # automated test suite (node:test + supertest)
-  │   ├── .env.example
-  │   └── package.json
-  ├── frontend/
-  │   ├── src/
-  │   │   ├── components/  # DishGrid, DishCard, StatusBadge, ToggleSwitch, ErrorBanner
-  │   │   ├── hooks/       # useDishDraft.js (draft, dirty state, save/discard/conflict)
-  │   │   ├── services/    # api.js client
-  │   │   ├── App.jsx      # Top-level view & background poll coordinator
-  │   │   ├── index.css    # Clean, responsive CSS design system
-  │   │   └── main.jsx
-  │   ├── index.html
-  │   ├── .env.example
-  │   └── package.json
-  ├── scripts/             # dev.js (lightweight process orchestrator), resetDb.js
-  ├── .env.example         # Root environment example
-  ├── .gitignore           # Ignores node_modules, *.db, *.db-wal, .env
-  ├── package.json         # Root scripts (install:all, seed, dev, start, test)
-  └── README.md
-  ```
+| Layer | Technology |
+|-------|-----------|
+| **Frontend** | React 19, Vite 8 |
+| **Backend** | Node.js, Express 4 |
+| **Database** | SQLite via `better-sqlite3` (WAL mode) |
+| **Concurrency** | Optimistic locking with row-level versioning |
+
+---
+
+## Project Structure
+
+```
+nosh-dish-dashboard/
+├── assets/                        # Screenshots for README
+├── backend/
+│   ├── data/
+│   │   └── dishes.json            # Seed data (5 dishes)
+│   ├── scripts/
+│   │   └── seed.js                # Idempotent seeder (INSERT OR IGNORE)
+│   └── src/
+│       ├── app.js                 # Express app setup (CORS, routes, error handler)
+│       ├── server.js              # HTTP server entry point
+│       ├── controllers/
+│       │   └── dishController.js  # Route handlers
+│       ├── db/
+│       │   ├── connection.js      # SQLite connection & schema init
+│       │   └── dishRepository.js  # Data access layer (atomic update)
+│       ├── middleware/
+│       │   └── errorHandler.js    # Centralised error middleware
+│       ├── routes/
+│       │   └── dishRoutes.js      # GET / GET :id / PATCH :id
+│       └── services/
+│           └── dishService.js     # Business logic & validation
+├── frontend/
+│   ├── src/
+│   │   ├── App.jsx                # Root component, router, polling
+│   │   ├── main.jsx               # React DOM entry
+│   │   ├── index.css              # All styles
+│   │   ├── components/
+│   │   │   ├── DishCard.jsx       # Individual dish card with draft editing
+│   │   │   ├── DishGrid.jsx       # Grid layout, loading skeletons, empty state
+│   │   │   ├── ErrorBanner.jsx    # Reusable error/info/conflict banner
+│   │   │   ├── StatusBadge.jsx    # Version, published, draft, unsaved badges
+│   │   │   └── ToggleSwitch.jsx   # Styled toggle for publish status
+│   │   ├── hooks/
+│   │   │   └── useDishDraft.js    # Draft state, save, discard, conflict logic
+│   │   └── services/
+│   │       └── api.js             # Fetch wrappers, ApiError class
+│   └── vite.config.js
+├── scripts/
+│   ├── dev.js                     # Starts backend + frontend concurrently
+│   └── resetDb.js                 # Wipes and re-seeds the database
+├── .env.example                   # Reference env vars
+├── .gitignore
+└── package.json                   # Root workspace scripts
+```
 
 ---
 
 ## Prerequisites
 
-- **Node.js**: `18.0.0` or higher (tested on Node `v24.16.0`)
-- **npm**: `9.0.0` or higher
-- Operating System: macOS, Linux, or Windows (cross-platform path resolution and commands)
+- **Node.js** ≥ 18 (LTS recommended)
+- **npm** ≥ 9
+
+> `better-sqlite3` ships pre-built binaries for most platforms. If your platform requires compilation you will also need Python 3 and a C++ toolchain.
 
 ---
 
-## Quick Start & Setup
+## Getting Started
 
-### 1. Install all dependencies
-Installs backend, frontend, and root dependencies with a single command:
+### 1. Clone the Repository
+
+```bash
+git clone <repository-url>
+cd nosh-dish-dashboard
+```
+
+### 2. Install Dependencies
+
+A single command installs root, backend, and frontend dependencies:
+
 ```bash
 npm run install:all
 ```
 
-### 2. Seed the database
-Loads `dishes.json` into the persistent SQLite database (`backend/data/nosh.db`):
+### 3. Configure Environment
+
+Copy the example env files:
+
+```bash
+# Root (optional, values used by scripts/dev.js)
+cp .env.example .env
+
+# Backend
+cp backend/.env.example backend/.env
+
+# Frontend
+cp frontend/.env.example frontend/.env
+```
+
+Default values work out of the box — no changes required for local development:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `3000` | Express server port |
+| `DB_PATH` | `./data/nosh.db` | SQLite database file path (relative to `backend/`) |
+| `CORS_ORIGIN` | `http://localhost:5173` | Allowed CORS origin |
+| `VITE_API_BASE_URL` | `http://localhost:3000` | Backend URL used by the frontend |
+
+### 4. Seed the Database
+
 ```bash
 npm run seed
 ```
-*Note: Rerunning this command uses `INSERT OR IGNORE` keyed on `dishId` and will never duplicate records or overwrite saved edits.*
 
-### 3. Start the application (Backend + Frontend)
+This loads the 5 dishes from [`backend/data/dishes.json`](backend/data/dishes.json) into SQLite.
+
+> **Idempotent:** The seeder uses `INSERT OR IGNORE` keyed on `dishId`. Running `npm run seed` multiple times will **never duplicate dishes** and will **never overwrite or reset** dishes that you have already edited. Only dishes whose `dishId` is missing from the table are inserted.
+
+### 5. Run the Application
+
 ```bash
 npm run dev
 ```
-- **Frontend Dashboard**: [http://localhost:5173](http://localhost:5173)
-- **Backend API**: [http://localhost:3001/dishes](http://localhost:3001/dishes)
-- **Health Check**: [http://localhost:3001/health](http://localhost:3001/health)
 
-### 4. Other root commands
-- `npm run seed:test`: Inserts a test dish with an invalid image URL for validation testing.
-- `npm run seed:reset`: Clears dishes and reseeds original records at version 1.
-- `npm test`: Runs the automated test suite (`node --test`).
-- `npm run test:concurrency`: Runs the automated 10-client concurrency test.
-- `npm start`: Runs the backend standalone server.
+This starts both the backend (port 3000) and frontend (port 5173) concurrently.
+
+Open your browser at **http://localhost:5173**.
 
 ---
 
-## Environment Configuration
+## Seeding & Reseeding
 
-Copy the example `.env` files if customization is needed:
+### `npm run seed` — Safe & Additive
 
-### Root `.env` (or `.env.example`)
-```env
-PORT=3001
-DB_PATH=./backend/data/nosh.db
-CORS_ORIGIN=http://localhost:5173
-VITE_API_BASE_URL=http://localhost:3001
+- Reads `backend/data/dishes.json` (5 dishes).
+- Uses **`INSERT OR IGNORE`** — only inserts dishes whose `dishId` does not already exist in the database.
+- **Will not duplicate** existing dishes on repeated runs.
+- **Will not overwrite** edited dish names, publish states, or version numbers.
+
+```
+$ npm run seed
+[Seed] Processing 5 dishes from seed file...
+[Seed] Seeding complete: 0 inserted, 5 skipped.   ← all 5 already exist
 ```
 
-### Backend `backend/.env.example`
-```env
-PORT=3001
-DB_PATH=./data/nosh.db
-CORS_ORIGIN=http://localhost:5173
-```
+### `npm run seed:reset` — Full Reset
 
-### Frontend `frontend/.env.example`
-```env
-VITE_API_BASE_URL=http://localhost:3001
+- **Deletes all rows** from the `dishes` table (`DELETE FROM dishes`).
+- Re-runs the seeder to insert all 5 dishes fresh with `version = 1`.
+- Use this only when you want a clean slate.
+
+```
+$ npm run seed:reset
+[Reset] Existing dishes cleared.
+[Seed] Seeding complete: 5 inserted, 0 skipped.
 ```
 
 ---
 
-## Architecture & Layering
+## Available Scripts
 
-The backend follows a strict layered separation of responsibilities:
-```text
-HTTP Request
-     │
-     ▼
-[routes/dishRoutes.js]        (URL routing & HTTP verb mapping)
-     │
-     ▼
-[controllers/dishController.js] (Request parameter extraction & response formatting)
-     │
-     ▼
-[services/dishService.js]       (Business validation: URL checks, trimmed names, error dispatch)
-     │
-     ▼
-[db/dishRepository.js]         (Data access & SQL transactions: better-sqlite3)
-     │
-     ▼
-[SQLite DB: nosh.db]           (Persistent table with WAL mode)
-```
+All scripts are run from the **project root**:
 
-1. **Routes**: Pure mapping of `/dishes` and `/dishes/:dishId` to controller methods.
-2. **Controllers**: Handle HTTP semantics, extract bodies/params, and pass errors to `next(err)`.
-3. **Services**: Enforce domain validation rules:
-   - Type verification (`dishName` string, `isPublished` boolean, `expectedVersion` integer >= 1).
-   - Publishing rules: trimmed name must not be empty, stored `imageUrl` must parse as a valid `http:` or `https:` URL via the native `URL` constructor.
-4. **Repository**: Executes SQL statements. The update query runs atomically inside a `better-sqlite3` transaction:
-   ```sql
-   UPDATE dishes
-   SET dishName = ?, isPublished = ?, version = version + 1
-   WHERE dishId = ? AND version = ?
-   ```
-   If `changes === 1`, returns the updated row with incremented version.
-   If `changes === 0`, queries the row: if not found returns 404; if found returns 409 Conflict with `currentDish`.
-5. **Central Error Handler**:
-   - `400`: Invalid inputs or malformed JSON (`{ error: "Bad Request", message, details }`).
-   - `404`: Non-existent dish (`{ error: "Not Found", message }`).
-   - `409`: Stale version conflict (`{ error: "Conflict", message, currentDish }`).
-   - `500`: Generic error response to client; detailed error logged on server.
+| Script | Command | Description |
+|--------|---------|-------------|
+| **Install all** | `npm run install:all` | Installs root, backend, and frontend dependencies |
+| **Seed** | `npm run seed` | Idempotent seed — inserts missing dishes only |
+| **Reset + Seed** | `npm run seed:reset` | Wipes all dishes and re-seeds from JSON |
+| **Dev** | `npm run dev` | Starts backend (watch mode) + frontend (Vite HMR) |
+| **Start** | `npm run start` | Starts backend only (production) |
 
 ---
 
-## API Reference & curl Examples
+## API Reference
 
-### 1. GET /dishes
-Returns all dishes with published status as boolean and version integer.
+Base URL: `http://localhost:3000`
 
-**Command:**
-```bash
-curl -X GET http://localhost:3001/dishes
-```
+### `GET /dishes`
 
-**Response (200 OK):**
+Returns all dishes sorted by `dishId`.
+
+**Response** `200 OK`
+
 ```json
 [
   {
@@ -191,339 +254,96 @@ curl -X GET http://localhost:3001/dishes
     "imageUrl": "https://nosh-assignment.s3.ap-south-1.amazonaws.com/jeera-rice.jpg",
     "isPublished": true,
     "version": 1
-  },
-  {
-    "dishId": "2",
-    "dishName": "Paneer Tikka",
-    "imageUrl": "https://nosh-assignment.s3.ap-south-1.amazonaws.com/paneer-tikka.jpg",
-    "isPublished": true,
-    "version": 1
   }
 ]
 ```
 
----
+### `GET /dishes/:dishId`
 
-### 2. PATCH /dishes/:dishId (Successful Update)
-Saves trimmed name and explicit published status, incrementing version to `version + 1`.
+Returns a single dish.
 
-**Command:**
-```bash
-curl -X PATCH http://localhost:3001/dishes/1 \
-  -H "Content-Type: application/json" \
-  -d '{"dishName": "  Royal Jeera Rice  ", "isPublished": true, "expectedVersion": 1}'
-```
+**Response** `200 OK` | `404 Not Found`
 
-**Response (200 OK):**
+### `PATCH /dishes/:dishId`
+
+Updates `dishName` and `isPublished` with optimistic locking.
+
+**Request Body**
+
 ```json
 {
-  "dishId": "1",
-  "dishName": "Royal Jeera Rice",
-  "imageUrl": "https://nosh-assignment.s3.ap-south-1.amazonaws.com/jeera-rice.jpg",
+  "dishName": "Jeera Rice (Updated)",
   "isPublished": true,
-  "version": 2
+  "expectedVersion": 1
 }
 ```
 
----
+**Responses**
 
-### 3. PATCH /dishes/:dishId (400 Bad Request - Validation Error)
-Triggered when input types are invalid, expectedVersion < 1, or publishing with an empty name or invalid image URL.
+| Status | Meaning |
+|--------|---------|
+| `200` | Update succeeded — returns the updated dish with `version` incremented |
+| `400` | Validation error — missing or invalid fields |
+| `404` | Dish not found |
+| `409` | **Conflict** — `expectedVersion` does not match the current row version. Response includes `currentDish` with the latest server state |
 
-**Command (Attempting to publish with whitespace name):**
-```bash
-curl -X PATCH http://localhost:3001/dishes/1 \
-  -H "Content-Type: application/json" \
-  -d '{"dishName": "   ", "isPublished": true, "expectedVersion": 2}'
-```
+**409 Conflict Response**
 
-**Response (400 Bad Request):**
-```json
-{
-  "error": "Bad Request",
-  "message": "Validation failed for publishing dish",
-  "details": [
-    "dishName cannot be empty when dish is published"
-  ]
-}
-```
-
-**Command (Malformed JSON payload):**
-```bash
-curl -X PATCH http://localhost:3001/dishes/1 \
-  -H "Content-Type: application/json" \
-  -d '{"dishName": "broken'
-```
-
-**Response (400 Bad Request):**
-```json
-{
-  "error": "Bad Request",
-  "message": "Malformed JSON payload in request body"
-}
-```
-
----
-
-### 4. PATCH /dishes/:dishId (404 Not Found)
-Triggered when targeting an unknown dish identifier.
-
-**Command:**
-```bash
-curl -X PATCH http://localhost:3001/dishes/unknown-999 \
-  -H "Content-Type: application/json" \
-  -d '{"dishName": "Ghost Dish", "isPublished": false, "expectedVersion": 1}'
-```
-
-**Response (404 Not Found):**
-```json
-{
-  "error": "Not Found",
-  "message": "Dish with ID \"unknown-999\" not found"
-}
-```
-
----
-
-### 5. PATCH /dishes/:dishId (409 Conflict)
-Triggered when `expectedVersion` does not match the stored version (optimistic concurrency conflict).
-
-**Command (Sending stale version 1 when dish is at version 2):**
-```bash
-curl -X PATCH http://localhost:3001/dishes/1 \
-  -H "Content-Type: application/json" \
-  -d '{"dishName": "Stale Attempt", "isPublished": true, "expectedVersion": 1}'
-```
-
-**Response (409 Conflict):**
 ```json
 {
   "error": "Conflict",
   "message": "Conflict: Dish has been modified by another update",
   "currentDish": {
     "dishId": "1",
-    "dishName": "Royal Jeera Rice",
-    "imageUrl": "https://nosh-assignment.s3.ap-south-1.amazonaws.com/jeera-rice.jpg",
+    "dishName": "Jeera Rice",
+    "imageUrl": "https://...",
     "isPublished": true,
-    "version": 2
+    "version": 3
   }
 }
 ```
 
 ---
 
-## Verification & Acceptance Checks
+## Architecture
 
-The application satisfies all 7 required acceptance checks. Reviewers can execute the exact steps below:
-
-### Check 1: Seed twice, no duplicates, no overwritten edits
-- **Step 1**: Run the seed script:
-  ```bash
-  npm run seed
-  ```
-  *Output: `Seeding complete: 5 inserted, 0 skipped.` (or 0 inserted, 5 skipped if already seeded).*
-- **Step 2**: Edit a dish via the UI or curl (e.g. rename dish 1 to "Persisted Rice" at version 2).
-- **Step 3**: Rerun the seed script:
-  ```bash
-  npm run seed
-  ```
-  *Output: `Seeding complete: 0 inserted, 5 skipped.`*
-- **Verification**: Query `GET http://localhost:3001/dishes/1`. Notice that the dish name is still "Persisted Rice" and the version remains 2. No duplicates and no overwrites occurred.
-
----
-
-### Check 2: Edit without saving shows no DB change; Discard resets
-- **Step 1**: In the dashboard, locate any dish card (e.g., "Paneer Tikka").
-- **Step 2**: Type "Paneer Tikka Spicy" in the name input or toggle the publish switch.
-- **Observation**:
-  - The card displays an **"Unsaved changes"** badge.
-  - The card border highlights with an accent glow.
-  - **Save** and **Discard** buttons appear.
-- **Step 3**: Verify database state:
-  ```bash
-  curl http://localhost:3001/dishes/2
-  ```
-  Notice the database still has the original name ("Paneer Tikka"). No network call was made.
-- **Step 4**: Click the **Discard** button on the card.
-- **Observation**: The input resets to "Paneer Tikka", the "Unsaved changes" badge disappears, and the Save/Discard buttons disappear.
-
----
-
-### Check 3: Save persists across refresh and backend restart
-- **Step 1**: In the dashboard, edit dish 1 to "Smoked Jeera Rice" and click **Save**.
-- **Observation**: The card displays a saving spinner, saves, updates the version badge from `v1` to `v2`, and clears the dirty indicator.
-- **Step 2**: Refresh the browser page (`F5`).
-- **Observation**: The card renders "Smoked Jeera Rice" with `v2`.
-- **Step 3**: In the terminal, stop the backend process (`Ctrl+C`) and restart it (`npm run dev` or `npm start`). Refresh the browser.
-- **Observation**: Data remains intact. Persistent SQLite stored the row in `backend/data/nosh.db`.
-
----
-
-### Check 4: Publish with empty name rejected & publish with invalid image URL rejected
-- **Test 4A (Empty name rejection)**:
-  1. In the dashboard on any card, clear the name input and ensure published toggle is ON.
-  2. Click **Save**.
-  3. **Observation**: Card displays an inline error:
-     `Validation Error: dishName cannot be empty when dish is published`. The draft remains in the input for correction.
-  4. Via curl:
-     ```bash
-     curl -i -X PATCH http://localhost:3001/dishes/1 \
-       -H "Content-Type: application/json" \
-       -d '{"dishName": "   ", "isPublished": true, "expectedVersion": 2}'
-     ```
-     Returns `HTTP 400 Bad Request`.
-
-- **Test 4B (Invalid image URL rejection)**:
-  1. Insert a test dish with an invalid image URL by running:
-     ```bash
-     npm run seed:test
-     ```
-     *(This inserts dish `test-bad-url` with `imageUrl: "invalid-image-protocol://broken/image.jpg"` and `isPublished: false`).*
-  2. In the dashboard, locate the card "Dish With Malformed Image URL".
-  3. Notice the broken-image fallback placeholder rendered smoothly.
-  4. Toggle the switch to **Published** and click **Save**.
-  5. **Observation**: Card displays an inline error:
-     `imageUrl must be a valid HTTP or HTTPS URL to publish`.
-  6. Via curl:
-     ```bash
-     curl -i -X PATCH http://localhost:3001/dishes/test-bad-url \
-       -H "Content-Type: application/json" \
-       -d '{"dishName": "Test Name", "isPublished": true, "expectedVersion": 1}'
-     ```
-     Returns `HTTP 400 Bad Request`.
-
----
-
-### Check 5: Two-tab conflict test (A saves, B gets 409, B's draft preserved)
-- **Step 1**: Open [http://localhost:5173](http://localhost:5173) in **Tab A** and **Tab B**.
-- **Step 2**: On dish 4 ("Chicken Biryani" at `v1`), edit the name in Tab A to "Dum Biryani".
-- **Step 3**: On the same dish in Tab B, edit the name to "Hyderabadi Biryani".
-- **Step 4**: In **Tab A**, click **Save**. Tab A succeeds and updates to `v2`.
-- **Step 5**: In **Tab B**, click **Save**.
-- **Observation in Tab B**:
-  - The request returns `HTTP 409 Conflict`.
-  - Tab B's draft ("Hyderabadi Biryani") is **fully preserved** in the input field!
-  - A prominent conflict banner appears:
-    `"Another update changed this dish (now v2). Reload to get the latest, which will discard your draft."`
-  - A button **"Reload latest (discards my draft)"** is offered.
-  - Clicking "Reload latest" updates the card to "Dum Biryani" (`v2`) and clears the draft.
-  - The system never silently overwrites or auto-retries.
-
----
-
-### Check 6: Failed-save test (stop backend, draft stays editable, retry works)
-- **Step 1**: In the dashboard, edit dish 5 ("Alfredo Pasta") to "Creamy Alfredo Pasta".
-- **Step 2**: Stop the backend process in your terminal (`Ctrl+C`).
-- **Step 3**: Click **Save** in the dashboard.
-- **Observation**:
-  - The save fails due to network unreachability.
-  - The card displays an inline error: `Network connection failed: Server unreachable`.
-  - The user's draft ("Creamy Alfredo Pasta") remains **intact and editable**.
-- **Step 4**: Restart the backend (`npm run dev` or `npm start`).
-- **Step 5**: Click **Save** again.
-- **Observation**: The request succeeds, saves "Creamy Alfredo Pasta", advances the version, and clears error states.
-
----
-
-### Check 7: Concurrency test (parallel PATCH requests with same expectedVersion)
-Run the automated concurrency verification script:
-```bash
-npm run test:concurrency
 ```
-*You can also pass a specific dishId: `npm run test:concurrency 1`.*
-
-**What it does:**
-1. Fetches the current dish version (e.g. `version: 1`).
-2. Fires **10 parallel PATCH requests** simultaneously with the exact same `expectedVersion: 1`.
-3. Verifies that **exactly 1 request** succeeds with `200 OK`, and the remaining **9 requests** receive `409 Conflict`.
-4. Verifies the database final version is incremented exactly once (`version: 2`).
-
-**Execution output:**
-```text
-========================================
-Running Concurrency Test on dishId: 1
-Target: http://localhost:3001/dishes/1
-Firing 10 parallel PATCH requests with the SAME expectedVersion...
-========================================
-
-[Initial State] Dish name: "Jeera Rice", Version: 1
-
-[Results Summary]
-  - 200 OK (Success):   1 (Expected: 1)
-  - 409 Conflict:       9 (Expected: 9)
-  - Other status:       0 (Expected: 0)
-[Final State] Version in DB: 2 (Expected: 2)
-[Winning Dish Name]: "Concurrent Update #1"
-
-✅ CONCURRENCY TEST PASSED! Optimistic locking successfully prevented race conditions.
+┌─────────────────────┐          ┌──────────────────────────┐
+│     React (Vite)    │  fetch   │     Express Backend      │
+│                     │ ───────► │                          │
+│  App.jsx            │ ◄─────── │  GET  /dishes            │
+│    ├ DishGrid       │  JSON    │  GET  /dishes/:id        │
+│    │  └ DishCard    │          │  PATCH /dishes/:id       │
+│    └ useDishDraft() │          │                          │
+│                     │          │  dishService.js           │
+│  • Local draft state│          │    └ Validation           │
+│  • Background poll  │          │  dishRepository.js        │
+│  • Conflict UI      │          │    └ Atomic UPDATE ... WHERE│
+│                     │          │      version = ?          │
+└─────────────────────┘          └────────┬─────────────────┘
+                                          │
+                                 ┌────────▼─────────────────┐
+                                 │   SQLite (better-sqlite3) │
+                                 │   WAL mode, row versioning│
+                                 │                           │
+                                 │  dishes                   │
+                                 │  ├ dishId   TEXT PK       │
+                                 │  ├ dishName TEXT           │
+                                 │  ├ imageUrl TEXT           │
+                                 │  ├ isPublished INTEGER     │
+                                 │  └ version  INTEGER        │
+                                 └───────────────────────────┘
 ```
 
----
+### Optimistic Locking Flow
 
-## Key Design Decision: Optimistic Concurrency Control
-
-### Why Optimistic Locking?
-In multi-user collaborative dashboards, two common concurrency control strategies exist:
-1. **Pessimistic Locking**: Locking a row or resource exclusively when a user opens an edit form.
-2. **Optimistic Locking**: Allowing users to edit concurrently and validating that the resource was not modified before committing the write.
-
-### Trade-off Evaluation:
-- **Pessimistic Locking Drawbacks**:
-  - Requires maintaining server-side lock state (e.g., in Redis or DB tables).
-  - Vulnerable to abandoned locks if a user closes the tab, loses network, or walks away from their laptop.
-  - High friction for read-heavy dashboards.
-- **Optimistic Locking Advantages**:
-  - **Stateless & Scalable**: No lock leases, timeouts, or socket state to maintain.
-  - **Atomic SQL Guarantees**: A single SQL query `UPDATE dishes SET ... version = version + 1 WHERE dishId = ? AND version = ?` leverages SQLite's ACID guarantees. SQLite's write transaction locks the row during the execution of that single statement, ensuring race conditions are impossible under high concurrency.
-  - **Superior User Experience**: Drafts are preserved on conflict, giving the user explicit control to review the newer version before deciding to discard or re-apply changes.
+1. Client loads dish → receives `version: N`
+2. User edits name / toggles publish → local draft only
+3. User clicks **Save** → `PATCH /dishes/:id` with `expectedVersion: N`
+4. Server runs inside a transaction:
+   - `UPDATE dishes SET ... WHERE dishId = ? AND version = N`
+   - If `changes === 1` → success, returns dish with `version: N+1`
+   - If `changes === 0` → row exists but version differs → **409 Conflict** with the current server dish
+5. Client on 409 → shows conflict banner → user clicks **Reload latest** to accept the server version
 
 ---
-
-## Bonus Feature: Live External Update Sync
-
-The dashboard implements automated live external synchronization as specified in Section 4 of the requirements:
-1. **Polling Frequency**: GET `/dishes` is polled every **5 seconds** in the background.
-2. **Page Visibility Management**:
-   - Uses `document.addEventListener('visibilitychange', ...)`
-   - When the user switches tabs or minimizes the window (`document.visibilityState === 'hidden'`), polling is paused and the header indicator displays `"Sync paused"`.
-   - When the tab becomes visible again, polling triggers immediately and resumes the 5-second interval timer.
-3. **Timer Cleanup**: `clearInterval` and event listener removal are strictly executed in the `useEffect` cleanup return to prevent memory leaks on unmount.
-4. **Temporary Disconnection Handling**:
-   - If a background poll fails (e.g. intermittent network fluctuation), the dashboard displays a non-intrusive `"Reconnecting..."` pulsing indicator.
-   - The user's screen is not disrupted with full-page errors; polling gracefully retries on the next tick.
-5. **Non-destructive Merging**:
-   - If an external update modifies a dish while a user has **no unsaved edits** on that card, the card automatically reflects the latest server values.
-   - If the user has an **active draft** (dirty card), the draft is **never touched or overwritten in the background**.
-   - Instead, the card displays an alert: `"External Update Available: Another update saved this dish as v{n} on the server"` with a `"Reload latest (discards my draft)"` button.
-
----
-
-## Automated Testing
-
-The backend includes an automated test suite covering all critical paths:
-- HTTP 200 GET all dishes (boolean types, integer versions)
-- HTTP 400 validation: non-string names, non-boolean published flags, expectedVersion < 1, empty published name, invalid published image URL, and malformed JSON
-- HTTP 404 for non-existent dish IDs
-- Atomic updates: trimmed names, version increments, DB persistence
-- HTTP 409 conflict detection with `currentDish` payload
-- High concurrency: 10 parallel conflicting requests yielding exactly 1 success and 9 conflicts
-
-Run the automated tests:
-```bash
-npm test
-```
-
----
-
-## Known Limitations
-
-- **Single Process SQLite**: SQLite is embedded and file-based. While WAL mode enables concurrent readers and atomic writes, horizontal multi-server scaling across multiple machines would require a client-server database (e.g., PostgreSQL).
-- **In-Memory Image Validation**: Image URL validation uses the WHATWG `URL` constructor to verify structure and HTTP/HTTPS protocol. Network reachability checks (e.g. HEAD requests) are intentionally omitted per the project specification.
-- **Polling vs WebSockets**: Polling every 5 seconds was selected to meet the exact bonus specification without external broker dependencies. For applications with tens of thousands of simultaneous users, WebSockets or Server-Sent Events (SSE) would reduce HTTP request overhead.
-
----
-
-## Approximate Time Spent & Disclosures
-
-- **Approximate Time Spent**: ~3.5 hours (Planning, Backend architecture, Validation, Optimistic locking, React hooks & components, Design system, Bonus polling, Concurrency tests, Documentation).
-- **AI & Tools Disclosure**: Developed using the Antigravity assistant for architecture ideation, boilerplate setup, and test verification. All code was reviewed, validated, and tested end-to-end against the assignment requirements.

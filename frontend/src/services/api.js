@@ -60,6 +60,46 @@ export async function getDishes() {
 }
 
 /**
+ * Fetches a single dish by ID
+ * @param {string} dishId
+ * @returns {Promise<Object>}
+ */
+export async function getDish(dishId) {
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}/dishes/${encodeURIComponent(dishId)}`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+  } catch (netErr) {
+    throw new ApiError(
+      `Unable to reach backend server: ${netErr.message || 'Network error'}`,
+      0
+    );
+  }
+
+  let data = {};
+  try {
+    data = await response.json();
+  } catch {
+    // Non-JSON response
+  }
+
+  if (!response.ok) {
+    throw new ApiError(
+      data.message || data.error || `HTTP error ${response.status}`,
+      response.status,
+      data.details || null,
+      data.currentDish || null
+    );
+  }
+
+  return data;
+}
+
+/**
  * Updates a dish with optimistic locking
  * @param {string} dishId
  * @param {Object} payload
