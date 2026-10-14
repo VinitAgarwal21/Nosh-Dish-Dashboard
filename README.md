@@ -55,6 +55,8 @@ A full-stack dish management dashboard that lets restaurant operators view, edit
 | Single Dish Detail | Draft Editing (Dirty State) |
 |--------------------|----------------------------|
 | ![Dish Detail](assets/03_dish_detail.png) | ![Draft Editing](assets/04_draft_editing.png) |
+| Conflict in Versions | Validation Check |
+|--------------------|----------------------------|
 | ![Conflict in versions](assets/image-5.png) | ![Validation Check](assets/image.png) |
 
 
