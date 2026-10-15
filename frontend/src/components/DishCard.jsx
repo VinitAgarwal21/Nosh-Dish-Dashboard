@@ -14,6 +14,7 @@ export function DishCard({
   onSaveSuccess,
   onReloadDish,
   onViewDish,
+  onDirtyChange,
 }) {
   const [imageError, setImageError] = useState(false);
 
@@ -39,6 +40,14 @@ export function DishCard({
     onSaveSuccess,
     onReloadDish,
   });
+
+  // Notify parent of dirty/draft state for polling decisions
+  React.useEffect(() => {
+    onDirtyChange?.(dish.dishId, isDirty);
+    return () => {
+      onDirtyChange?.(dish.dishId, false);
+    };
+  }, [dish.dishId, isDirty, onDirtyChange]);
 
   const hasServerUpdate =
     isDirty &&

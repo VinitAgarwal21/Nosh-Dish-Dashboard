@@ -42,7 +42,25 @@ function updateDish(req, res, next) {
       throw err;
     }
 
-    const { dishName, isPublished, expectedVersion } = req.body;
+    const { dishName, isPublished, expectedVersion, imageUrl } = req.body;
+
+    // URL checker at patch route controller: validate provided imageUrl or existing dish imageUrl
+    if (imageUrl !== undefined && !dishService.isValidHttpUrl(imageUrl)) {
+      const err = new Error('the imageUrl is not valid cannot send request');
+      err.statusCode = 400;
+      err.details = ['the imageUrl is not valid cannot send request'];
+      throw err;
+    }
+
+    // Check target dish imageUrl
+    const existingDish = dishService.getDish(dishId);
+    const targetUrl = imageUrl !== undefined ? imageUrl : existingDish.imageUrl;
+    if (!dishService.isValidHttpUrl(targetUrl)) {
+      const err = new Error('the imageUrl is not valid cannot send request');
+      err.statusCode = 400;
+      err.details = ['the imageUrl is not valid cannot send request'];
+      throw err;
+    }
 
     const updatedDish = dishService.updateDish(dishId, {
       dishName,

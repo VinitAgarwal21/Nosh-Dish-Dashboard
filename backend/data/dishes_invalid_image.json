@@ -1,0 +1,8 @@
+[
+  {
+    "dishId": "99",
+    "dishName": "Bad Image Dish",
+    "imageUrl": "ftp://invalid-protocol.example.com/image.jpg",
+    "isPublished": false
+  }
+]

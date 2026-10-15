@@ -1,39 +1,21 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getDishes, getDish } from './services/api';
+import useRouter from './hooks/useRouter';
+import useDishPolling from './hooks/useDishPolling';
 import DishGrid from './components/DishGrid';
 import DishCard from './components/DishCard';
 import ErrorBanner from './components/ErrorBanner';
 
-const POLL_INTERVAL_MS = 5000;
-
 export function App() {
-  const [currentPath, setCurrentPath] = useState(
-    typeof window !== 'undefined' ? window.location.pathname : '/'
-  );
-
-  useEffect(() => {
-    const handlePopState = () => setCurrentPath(window.location.pathname);
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
-
-  const navigateTo = (path) => {
-    if (window.location.pathname !== path) {
-      window.history.pushState({}, '', path);
-    }
-    setCurrentPath(path);
-  };
-
-  const normalizedPath = (currentPath || '/').replace(/\/+$/, '') || '/';
-  const isHome = normalizedPath === '/';
-  const isDishes = normalizedPath === '/dishes';
-
-  // Support /dishes/:dishId route
-  const singleDishMatch = normalizedPath.match(/^\/dishes\/([^/]+)$/);
-  const isSingleDish = Boolean(singleDishMatch);
-  const singleDishId = singleDishMatch ? decodeURIComponent(singleDishMatch[1]) : null;
-
-  const isUnknownRoute = !isHome && !isDishes && !isSingleDish;
+  const {
+    currentPath,
+    navigateTo,
+    isHome,
+    isDishes,
+    isSingleDish,
+    singleDishId,
+    isUnknownRoute,
+  } = useRouter();
 
   const [dishes, setDishes] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -44,15 +26,41 @@ export function App() {
   const [singleDishLoading, setSingleDishLoading] = useState(false);
   const [singleDishError, setSingleDishError] = useState(null);
 
-  const [newerServerDishesMap, setNewerServerDishesMap] = useState({});
-  const [syncStatus, setSyncStatus] = useState('connected');
+  // Track dishIds that have active unsaved local drafts
+  const dirtyDishIdsRef = useRef(new Set());
 
-  const pollTimerRef = useRef(null);
+  const handleDirtyChange = useCallback((dishId, isDirty) => {
+    if (isDirty) {
+      dirtyDishIdsRef.current.add(dishId);
+    } else {
+      dirtyDishIdsRef.current.delete(dishId);
+    }
+  }, []);
+
   const dishesRef = useRef(dishes);
   dishesRef.current = dishes;
 
   const singleDishRef = useRef(singleDish);
   singleDishRef.current = singleDish;
+
+  // Background polling hook (pausing on blur, separate state updates, draft-aware auto-refresh)
+  const {
+    syncStatus,
+    newerServerDishesMap,
+    setNewerServerDishesMap,
+  } = useDishPolling({
+    isDishes,
+    isSingleDish,
+    singleDishId,
+    isLoading,
+    initialError,
+    singleDishError,
+    dishes,
+    setDishes,
+    singleDish,
+    setSingleDish,
+    dirtyDishIdsRef,
+  });
 
   // Load all dishes
   const loadInitialDishes = useCallback(async () => {
@@ -62,13 +70,12 @@ export function App() {
       const data = await getDishes();
       setDishes(data);
       setNewerServerDishesMap({});
-      setSyncStatus('connected');
     } catch (err) {
       setInitialError(err.message || 'Failed to load dishes from backend server.');
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [setNewerServerDishesMap]);
 
   // When on /dishes, load all dishes
   useEffect(() => {
@@ -112,92 +119,9 @@ export function App() {
     }
   }, [isSingleDish, singleDishId]);
 
-  // Background polling for all dishes on /dishes
-  const pollServer = useCallback(async () => {
-    if (document.visibilityState === 'hidden') {
-      setSyncStatus('paused');
-      return;
-    }
-
-    try {
-      if (isDishes) {
-        const serverDishes = await getDishes();
-        setSyncStatus('connected');
-
-        setNewerServerDishesMap((prevNewerMap) => {
-          const updatedNewerMap = { ...prevNewerMap };
-
-          setDishes((currentLocalDishes) => {
-            return currentLocalDishes.map((localDish) => {
-              const incoming = serverDishes.find((s) => s.dishId === localDish.dishId);
-              if (!incoming) return localDish;
-
-              if (incoming.version > localDish.version) {
-                updatedNewerMap[localDish.dishId] = incoming;
-                return localDish;
-              }
-
-              if (incoming.version === localDish.version) {
-                delete updatedNewerMap[localDish.dishId];
-              }
-
-              return localDish;
-            });
-          });
-
-          return updatedNewerMap;
-        });
-      } else if (isSingleDish && singleDishId) {
-        const incoming = await getDish(singleDishId);
-        setSyncStatus('connected');
-
-        setNewerServerDishesMap((prevNewerMap) => {
-          const updatedNewerMap = { ...prevNewerMap };
-          const current = singleDishRef.current;
-          if (current && incoming.version > current.version) {
-            updatedNewerMap[singleDishId] = incoming;
-          } else if (current && incoming.version === current.version) {
-            delete updatedNewerMap[singleDishId];
-          }
-          return updatedNewerMap;
-        });
-      }
-    } catch {
-      setSyncStatus('reconnecting');
-    }
-  }, [isDishes, isSingleDish, singleDishId]);
-
-  // Polling lifecycle: active on /dishes or /dishes/:dishId
-  useEffect(() => {
-    if ((!isDishes && !isSingleDish) || isLoading || initialError || singleDishError) return;
-
-    function startPolling() {
-      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
-      pollTimerRef.current = setInterval(pollServer, POLL_INTERVAL_MS);
-    }
-
-    function handleVisibilityChange() {
-      if (document.visibilityState === 'hidden') {
-        setSyncStatus('paused');
-        if (pollTimerRef.current) clearInterval(pollTimerRef.current);
-      } else {
-        setSyncStatus('connected');
-        pollServer();
-        startPolling();
-      }
-    }
-
-    startPolling();
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [isDishes, isSingleDish, isLoading, initialError, singleDishError, pollServer]);
-
   // Handle successful save
   const handleSaveSuccess = useCallback((savedDish) => {
+    dirtyDishIdsRef.current.delete(savedDish.dishId);
     setDishes((prev) =>
       prev.map((d) => (d.dishId === savedDish.dishId ? savedDish : d))
     );
@@ -209,10 +133,11 @@ export function App() {
       delete copy[savedDish.dishId];
       return copy;
     });
-  }, []);
+  }, [setNewerServerDishesMap]);
 
   // Handle reload dish
   const handleReloadDish = useCallback((reloadedDish) => {
+    dirtyDishIdsRef.current.delete(reloadedDish.dishId);
     setDishes((prev) =>
       prev.map((d) => (d.dishId === reloadedDish.dishId ? reloadedDish : d))
     );
@@ -224,7 +149,7 @@ export function App() {
       delete copy[reloadedDish.dishId];
       return copy;
     });
-  }, []);
+  }, [setNewerServerDishesMap]);
 
   const totalDishes = dishes.length;
   const publishedDishes = dishes.filter((d) => d.isPublished).length;
@@ -329,6 +254,7 @@ export function App() {
                 onSaveSuccess={handleSaveSuccess}
                 onReloadDish={handleReloadDish}
                 onViewDish={(dishId) => navigateTo(`/dishes/${dishId}`)}
+                onDirtyChange={handleDirtyChange}
               />
             )}
           </div>
@@ -376,6 +302,7 @@ export function App() {
                   setSingleDish(reloaded);
                   handleReloadDish(reloaded);
                 }}
+                onDirtyChange={handleDirtyChange}
               />
             ) : null}
           </div>

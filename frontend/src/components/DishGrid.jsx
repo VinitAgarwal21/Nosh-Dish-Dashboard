@@ -12,6 +12,7 @@ export function DishGrid({
   onSaveSuccess,
   onReloadDish,
   onViewDish,
+  onDirtyChange,
 }) {
   if (isLoading) {
     return (
@@ -51,6 +52,7 @@ export function DishGrid({
           onSaveSuccess={onSaveSuccess}
           onReloadDish={onReloadDish}
           onViewDish={onViewDish}
+          onDirtyChange={onDirtyChange}
         />
       ))}
     </div>
